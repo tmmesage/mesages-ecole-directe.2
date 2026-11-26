@@ -1,0 +1,52 @@
+name: Alerte École Directe
+
+on:
+  schedule:
+    # Toutes les 5 min, de 6h à 19h (heure de Paris en hiver), du lundi au samedi
+    - cron: "*/5 5-18 * * 1-6"
+  workflow_dispatch: {}   # permet de le lancer à la main pour tester
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alerte-ed
+  cancel-in-progress: false
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+
+      # etat.json (ce qui a déjà été signalé) est gardé dans le cache de GitHub,
+      # pas dans le dépôt : rien de personnel n'apparaît dans tes fichiers.
+      - name: Récupérer l'état précédent
+        uses: actions/cache/restore@v4
+        with:
+          path: etat.json
+          key: etat-${{ github.run_id }}
+          restore-keys: etat-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests
+
+      - name: Vérifier École Directe
+        env:
+          ED_IDENTIFIANT: ${{ secrets.tymofii228A }}
+          ED_MOTDEPASSE: ${{ secrets.Zz25062012& }}
+          ED_CN: ${{ secrets.ED_CN }}
+          ED_CV: ${{ secrets.ED_CV }}
+          NTFY_TOPIC: ${{ secrets.cours-annules-k7x92mqp }}
+        run: python alerte_ecoledirecte.py
+
+      - name: Sauver l'état
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: etat.json
+          key: etat-${{ github.run_id }}
