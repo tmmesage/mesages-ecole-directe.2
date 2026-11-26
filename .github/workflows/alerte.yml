@@ -37,8 +37,8 @@ jobs:
 
       - name: Vérifier École Directe
         env:
-          ED_IDENTIFIANT: ${{ secrets.tymofii228A }}
-          ED_MOTDEPASSE: ${{ secrets.Zz25062012& }}
+          ED_IDENTIFIANT: ${{ secrets.ED_tymofii228A }}
+          ED_MOTDEPASSE: ${{ secrets.ED_Zz25062012& }}
           ED_CN: ${{ secrets.ED_CN }}
           ED_CV: ${{ secrets.ED_CV }}
           NTFY_TOPIC: ${{ secrets.cours-annules-k7x92mqp }}
