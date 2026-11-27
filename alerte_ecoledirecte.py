@@ -61,35 +61,60 @@ class ClientED:
             self.s.headers["X-Token"] = j["token"]
         return j
 
-    def connexion(self, identifiant, mdp, cn=None, cv=None):
-        # 1. Récupérer le cookie GTK demandé par École Directe
-        self.s.get(f"{API}/login.awp?gtk=1&v={VERSION}", timeout=30)
-        gtk = self.s.cookies.get("GTK")
+    def _recuperer_gtk(self):
+        """Récupère le cookie GTK demandé par École Directe avant la connexion."""
+        self.s.headers.pop("X-Gtk", None)
+        self.s.headers.pop("X-Token", None)
+        r = self.s.get(f"{API}/login.awp?gtk=1&v={VERSION}", timeout=30)
+        gtk = None
+        for c in self.s.cookies:
+            if c.name == "GTK":
+                gtk = c.value
+        if not gtk:
+            # secours : lire directement l'en-tête Set-Cookie
+            for morceau in r.headers.get("Set-Cookie", "").split(";"):
+                morceau = morceau.strip()
+                if morceau.startswith("GTK="):
+                    gtk = morceau[4:]
         if gtk:
             self.s.headers["X-Gtk"] = gtk
+        print(f"[diag] GTK reçu : {'oui' if gtk else 'NON'} (HTTP {r.status_code})")
+        return gtk
 
-        # Les caractères spéciaux (& + % ...) doivent être encodés, sinon "mot de passe invalide"
+    def connexion(self, identifiant, mdp, cn=None, cv=None):
         identifiant = identifiant.strip()
+        mdp_brut = mdp
         mdp = mdp.strip()
-        donnees = {
-            "identifiant": quote(identifiant, safe=""),
-            "motdepasse": quote(mdp, safe=""),
-            "isRelogin": False,
-            "uuid": "",
-        }
-        if cn and cv:
-            donnees["fa"] = [{"cn": cn, "cv": cv}]
+        print(f"[diag] identifiant : {len(identifiant)} caractères ; "
+              f"mot de passe : {len(mdp)} caractères"
+              f"{' (espaces en trop retirés)' if mdp != mdp_brut else ''} ; "
+              f"caractères spéciaux : {'oui' if any(not ch.isalnum() for ch in mdp) else 'non'}")
 
-        j = self._post(f"{API}/login.awp?v={VERSION}", donnees)
-        code = j.get("code")
-        if code == 250:
-            raise DoubleAuthRequise()
-        if code != 200:
-            raise RuntimeError(f"Connexion refusée (code {code}) : {j.get('message')}")
+        # On essaie deux formats : encodé (recommandé) puis tel quel
+        essais = [
+            ("encodé", quote(identifiant, safe=""), quote(mdp, safe="")),
+            ("tel quel", identifiant, mdp),
+        ]
+        dernier = None
+        for nom, ident, motdepasse in essais:
+            self._recuperer_gtk()
+            donnees = {"identifiant": ident, "motdepasse": motdepasse,
+                       "isRelogin": False, "uuid": ""}
+            if cn and cv:
+                donnees["fa"] = [{"cn": cn, "cv": cv}]
+            j = self._post(f"{API}/login.awp?v={VERSION}", donnees)
+            code = j.get("code")
+            print(f"[diag] essai '{nom}' : code {code}")
+            if code == 250:
+                raise DoubleAuthRequise()
+            if code == 200:
+                compte = j["data"]["accounts"][0]
+                self.id_eleve = compte["id"]
+                print("[diag] connexion réussie")
+                return compte
+            dernier = j
 
-        compte = j["data"]["accounts"][0]
-        self.id_eleve = compte["id"]
-        return compte
+        raise RuntimeError(f"Connexion refusée (code {dernier.get('code')}) : {dernier.get('message')}")
 
     # --- Question de sécurité (mode setup) ---
     def question_securite(self):
