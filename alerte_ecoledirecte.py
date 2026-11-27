@@ -14,6 +14,7 @@ import datetime as dt
 import json
 import os
 import sys
+from urllib.parse import quote
 
 import requests
 
@@ -48,7 +49,9 @@ class ClientED:
         self.id_eleve = None
 
     def _post(self, url, donnees=None):
-        r = self.s.post(url, data={"data": json.dumps(donnees or {})}, timeout=30)
+        # Comme le site officiel : corps envoyé tel quel "data={...}" (pas ré-encodé)
+        corps = "data=" + json.dumps(donnees or {}, ensure_ascii=False)
+        r = self.s.post(url, data=corps.encode("utf-8"), timeout=30)
         r.raise_for_status()
         token = r.headers.get("X-Token")
         if token:
@@ -65,7 +68,15 @@ class ClientED:
         if gtk:
             self.s.headers["X-Gtk"] = gtk
 
-        donnees = {"identifiant": identifiant, "motdepasse": mdp, "isRelogin": False, "uuid": ""}
+        # Les caractères spéciaux (& + % ...) doivent être encodés, sinon "mot de passe invalide"
+        identifiant = identifiant.strip()
+        mdp = mdp.strip()
+        donnees = {
+            "identifiant": quote(identifiant, safe=""),
+            "motdepasse": quote(mdp, safe=""),
+            "isRelogin": False,
+            "uuid": "",
+        }
         if cn and cv:
             donnees["fa"] = [{"cn": cn, "cv": cv}]
 
